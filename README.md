@@ -35,6 +35,9 @@ has no attribute 'md__mypyc' (most likely due to a circular import)", reinstall
 
 pip install --force-reinstall charset-normalizer==3.1.0
 
+sudo apt-get install ros-noetic-ros-numpy 
+
+
 ## Arduino to test serial comm:
 
 
