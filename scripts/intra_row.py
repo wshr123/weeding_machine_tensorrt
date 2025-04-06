@@ -20,6 +20,9 @@ import matplotlib as mpl
 from scipy.stats import multivariate_normal
 from scipy import signal
 
+import tensorrtx_yolo
+from tensorrtx_yolo import YoLov5TRT, warmUpThread, inferThread
+
 # import torch
 
 import rospkg
@@ -51,9 +54,12 @@ class intra_row:
         self.yolo5_plant_id = self.param['intra_row']['yolo_plant_id']
         self.yolo5_model_path = self.pkg_path + 'weights/' + self.param['lane_det']['yolo_model']
         if self.segment_mode == 1:
-            import torch
-            self.model = torch.hub.load(self.pkg_path + 'yolov5', 'custom', path=self.yolo5_model_path, source='local')
+            engine_file = "/home/zhong/1t/myworkspace/src/tensorrtx-yolov5-v6.0/yolov5/build/besst.engine"
+            self.model = YoLov5TRT(engine_file)
             rospy.loginfo('using yolo5 based plant segmentation')
+            # import torch
+            # self.model = torch.hub.load(self.pkg_path + 'yolov5', 'custom', path=self.yolo5_model_path, source='local')
+            # rospy.loginfo('using yolo5 based plant segmentation')
         elif self.segment_mode == 2:
             self.model = None
             rospy.loginfo('using ExG based plant segmentation')
@@ -746,33 +752,55 @@ class intra_row:
         image_rgb = cv2.cvtColor(np_image, cv2.COLOR_BGR2RGB)
 
         # detection
-        results = self.model(image_rgb)
+        # results = self.model(image_rgb)
+        thread1 = warmUpThread(self.model)
+        thread1.start()
+        thread1.join()
+        batch_bbox, batch_score, batch_classids = self.model.infer([image_rgb])
+        batch_bbox = batch_bbox.tolist()
+        batch_score = batch_score.tolist()
+        batch_classids = batch_classids.tolist()
 
         # create a binary image for segmentation result
         image_seg_bn = np.zeros((image_rgb.shape[0], image_rgb.shape[1]))
+        i = 0
 
         # extract bbox coords, only select id=0, i.e. plants
-        bboxes = results.xyxy[0].cpu().numpy()
+        # bboxes = results.xyxy[0].cpu().numpy()
 
         # convert bbox based object detection results to segmentation result, e.g. either draw rectangles or circles
         det_ctr = None
         det_bbox = None
-        for bbox in bboxes:
-            x1, y1, x2, y2, conf, cls = bbox
-            if int(cls) == 0 and conf > 0.4 and y2 - y1 < 15 and x2 - x1 < 15:  # only select id=0, i.e. plants
+        for bbox in batch_bbox: #todo
+            x1, y1, x2, y2 = bbox[0], bbox[1], bbox[2], bbox[3]
+            if int(batch_classids[i]) == 0 and batch_score[i] > 0.4 and y2 - y1 < 15 and x2 - x1 < 15:
                 cv2.rectangle(det_image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 255, 255), 2)
-            if int(cls) == self.yolo5_plant_id:  # only select id=0, i.e. plants
-                # image_seg_bn = cv2.rectangle(image_seg_bn, (int(x1), int(y1)), (int(x2), int(y2)), 1, -1) # draw rect
+            if int(batch_classids[i]) == self.yolo5_plant_id:  # only select id=0, i.e. plants
                 image_seg_bn = cv2.circle(image_seg_bn, (int((x1 + x2) / 2.0), int((y1 + y2) / 2.0)),
                                           int(np.min(np.array([x2 - x1, y2 - y1]) / 2.0)), 1, -1)  # draw circle
                 cv2.rectangle(det_image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 255), 2)
-                if det_ctr is None:
-                    det_ctr = np.array([[(x1 + x2) / 2.0, (y1 + y2) / 2.0]])
-                    det_bbox = np.array([[x1, y1, x2, y2]])
-                else:
-                    det_ctr = np.block([[det_ctr], [(x1 + x2) / 2.0, (y1 + y2) / 2.0]])
-                    det_bbox = np.block([[det_bbox], [x1, y1, x2, y2]])
-
+            if det_ctr is None:
+                det_ctr = np.array([[(x1 + x2) / 2.0, (y1 + y2) / 2.0]])
+                det_bbox = np.array([[x1, y1, x2, y2]])
+            else:
+                det_ctr = np.block([[det_ctr], [(x1 + x2) / 2.0, (y1 + y2) / 2.0]])
+                det_bbox = np.block([[det_bbox], [x1, y1, x2, y2]])
+            i += 1
+       # for bbox in bboxes:
+       #      x1, y1, x2, y2, conf, cls = bbox
+       #      if int(cls) == 0 and conf > 0.4 and y2 - y1 < 15 and x2 - x1 < 15:  # only select id=0, i.e. plants
+       #          cv2.rectangle(det_image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 255, 255), 2)
+       #      if int(cls) == self.yolo5_plant_id:  # only select id=0, i.e. plants
+       #          # image_seg_bn = cv2.rectangle(image_seg_bn, (int(x1), int(y1)), (int(x2), int(y2)), 1, -1) # draw rect
+       #          image_seg_bn = cv2.circle(image_seg_bn, (int((x1 + x2) / 2.0), int((y1 + y2) / 2.0)),
+       #                                    int(np.min(np.array([x2 - x1, y2 - y1]) / 2.0)), 1, -1)  # draw circle
+       #          cv2.rectangle(det_image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 255), 2)
+       #          if det_ctr is None:
+       #              det_ctr = np.array([[(x1 + x2) / 2.0, (y1 + y2) / 2.0]])
+       #              det_bbox = np.array([[x1, y1, x2, y2]])
+       #          else:
+       #              det_ctr = np.block([[det_ctr], [(x1 + x2) / 2.0, (y1 + y2) / 2.0]])
+       #              det_bbox = np.block([[det_bbox], [x1, y1, x2, y2]])
         # ma blob img
         # ma_det = scipy.ndimage.uniform_filter(image_seg_bn, size=3, axes=None)
         img_seg_ma = image_seg_bn.copy()
