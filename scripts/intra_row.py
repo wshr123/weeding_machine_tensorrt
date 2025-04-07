@@ -2,7 +2,7 @@
 import numpy as np
 import rospy
 import sys
-
+import time
 import scipy.ndimage
 import tf
 from sensor_msgs.msg import PointCloud2, Image, CameraInfo
@@ -180,6 +180,7 @@ class intra_row:
         # store var
         try:
             self.img1 = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            self.img1 = cv2.resize(self.img1,(320,240))
         except CvBridgeError as e:
             print(e)
             return
@@ -188,6 +189,7 @@ class intra_row:
         # store var
         try:
             self.img2 = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            self.img2 = cv2.resize(self.img2, (320, 240))
         except CvBridgeError as e:
             print(e)
             return
@@ -196,6 +198,7 @@ class intra_row:
         # store var
         try:
             self.img3 = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            self.img3 = cv2.resize(self.img3, (320, 240))
         except CvBridgeError as e:
             print(e)
             return
@@ -204,6 +207,7 @@ class intra_row:
         # store var
         try:
             self.img4 = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            self.img4 = cv2.resize(self.img4, (320, 240))
         except CvBridgeError as e:
             print(e)
             return
@@ -212,6 +216,7 @@ class intra_row:
         # store var
         try:
             self.img5 = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            self.img5 = cv2.resize(self.img5, (320, 240))
         except CvBridgeError as e:
             print(e)
             return
@@ -220,6 +225,7 @@ class intra_row:
         # store var
         try:
             self.img6 = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            self.img6 = cv2.resize(self.img6, (320, 240))
         except CvBridgeError as e:
             print(e)
             return
@@ -234,7 +240,8 @@ class intra_row:
 
     # the main loop: detect line and send back the result
     def img_cb(self):
-        cur_t = rospy.get_time()
+        # cur_t = rospy.get_time()
+        cur_t = time.time()
 
         if self.img_cb_pre_t is not None:
             delta_t = cur_t - self.img_cb_pre_t
@@ -249,7 +256,9 @@ class intra_row:
         self.img_cb_pre_t = cur_t
 
         log_msg = String()
-        t0 = rospy.get_time()
+        # t0 = rospy.get_time()
+        t0 = time.time()
+
         if self.log_on:
             log_msg.data = str(rospy.get_time()) + ': start processing a new image.'
             self.log_msg_pub.publish(log_msg)
@@ -268,18 +277,19 @@ class intra_row:
         #     self.cam_img_size[1] * 0:self.cam_img_size[1] * 1, :] = self.img5
         # self.img_whole[self.cam_img_size[0] * 2:self.cam_img_size[0] * 3,
         #     self.cam_img_size[1] * 1:self.cam_img_size[1] * 2, :] = self.img6
+        #
         self.img_whole[270 * 0:270 * 0 + self.cam_img_size[0],
-            350 * 0:350 * 0 + self.cam_img_size[1], :] = self.img1
+            350 * 0:350 * 0 + self.cam_img_size[1], :] = cv2.resize(self.img1, (320, 240))
         self.img_whole[270 * 0:270 * 0 + self.cam_img_size[0],
-            350 * 1:350 * 1 + self.cam_img_size[1], :] = self.img2
+            350 * 1:350 * 1 + self.cam_img_size[1], :] = cv2.resize(self.img2, (320, 240))
         self.img_whole[270 * 1:270 * 1 + self.cam_img_size[0],
-            350 * 0:350 * 0 + self.cam_img_size[1], :] = self.img3
+            350 * 0:350 * 0 + self.cam_img_size[1], :] = cv2.resize(self.img3, (320, 240))
         self.img_whole[270 * 1:270 * 1 + self.cam_img_size[0],
-            350 * 1:350 * 1 + self.cam_img_size[1], :] = self.img4
+            350 * 1:350 * 1 + self.cam_img_size[1], :] = cv2.resize(self.img4, (320, 240))
         self.img_whole[270 * 2:270 * 2 + self.cam_img_size[0],
-            350 * 0:350 * 0 + self.cam_img_size[1], :] = self.img5
+            350 * 0:350 * 0 + self.cam_img_size[1], :] = cv2.resize(self.img5, (320, 240))
         self.img_whole[270 * 2:270 * 2 + self.cam_img_size[0],
-            350 * 1:350 * 1 + self.cam_img_size[1], :] = self.img6
+            350 * 1:350 * 1 + self.cam_img_size[1], :] = cv2.resize(self.img6, (320, 240))
 
         # cv2.line(self.img_whole, (0, self.cam_img_size[0]), (self.cam_img_size[1]*2, self.cam_img_size[0]), (0, 0, 255),
         #          1, cv2.LINE_AA)
@@ -397,7 +407,8 @@ class intra_row:
         #     self.det_img_right_pub.publish(det_image)
         self.det_img_pub.publish(det_ros_image)
 
-        t1 = rospy.get_time()
+        # t1 = rospy.get_time()
+        t1 = time.time()
         if self.verbose:
             if self.segment_mode == 1:
                 rospy.loginfo('time consumption until yolo5 based image det and seg = %f' % (t1 - t0))
@@ -433,7 +444,7 @@ class intra_row:
         sub_det_bbox4 = None
         sub_det_bbox5 = None
         sub_det_bbox6 = None
-        row_det_ctr = np.zeros((12, 10, 2))
+        row_det_ctr = np.zeros((12, 20, 2)) #todo 这里从10改成了20
         row_det_ctr_num = np.zeros((12, 1), dtype=int)
 
         # sub_seg_img1 = self.img_whole[0: self.cam_img_size[0], 0: self.cam_img_size[1]]
@@ -450,6 +461,7 @@ class intra_row:
         sub_seg_img6 = self.img_whole[270 * 2: 270*2 + self.cam_img_size[0], 350: 350 + self.cam_img_size[1]]
 
         # det_ctr: [x, y], x is along shape[1], y is along shape[0]
+        #to classify points into six imgs
         if det_ctr is not None:
             for n in range(det_ctr.shape[0]):
                 ctr = det_ctr[n, :]
